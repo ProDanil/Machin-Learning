@@ -39,13 +39,14 @@ while True:
     _, image = cap.read()
 
     h, w = image.shape[:2]
-    blob = cv2.dnn.blobFromImage(image, 1/255.0, (416, 416), swapRB=True, crop=False)
+    blob = cv2.dnn.blobFromImage(image, 1 / 255.0, (416, 416), swapRB=True, crop=False)
     net.setInput(blob)
     start = time.perf_counter()
     layer_outputs = net.forward(ln)
     time_took = time.perf_counter() - start
     # print("Time took:", time_took)
     boxes, confidences, class_ids = [], [], []
+    pos = 'none'
 
     # loop over each of the layer outputs
     for output in layer_outputs:
@@ -70,6 +71,12 @@ while True:
                 # и левый угол ограничительной рамки
                 x = int(centerX - (width / 2))
                 y = int(centerY - (height / 2))
+                if x < 138 - width:
+                    pos = 'left'
+                elif 138 - width <= x < 278 - width:
+                    pos = 'front'
+                else:
+                    pos = 'right'
 
                 # обновить наш список координат ограничивающего прямоугольника, достоверности,
                 # и идентификаторы класса
@@ -93,7 +100,7 @@ while True:
             # рисуем прямоугольник ограничивающей рамки и подписываем на изображении
             color = [int(c) for c in COLORS[class_ids[i]]]
             cv2.rectangle(image, (x, y), (x + w, y + h), color=color, thickness=thickness)
-            label = LABELS[class_ids[i]]
+            label = LABELS[class_ids[i]] + ' ' + pos
             text = f"{label}: {confidences[i]:.2f}"
             # print(text)
             found_obj[label] = [found_obj.get(label, [0, True])[0] + 1, True]
@@ -123,14 +130,12 @@ while True:
             musicThread.daemon = False
             musicThread.start()
 
-
     cv2.imshow("image", image)
     if ord("q") == cv2.waitKey(1):
         break
 
 cap.release()
 cv2.destroyAllWindows()
-
 
 # --------------------------------------------------------------------
 # импортируем необходимые пакеты
