@@ -6,11 +6,17 @@ from threading import Thread
 import os
 
 
-def play_voice(p):
-    # создать команду для воспроизведения музыки, затем выполнить
-    # команда
+# Функция для воспроизведения голосового оповещения
+def play_voice(p, q):
+    global play_fl
     command = "aplay -q {}".format(p)
     os.system(command)
+    time.sleep(0.5)
+    command = "aplay -q {}".format(q)
+    os.system(command)
+    time.sleep(0.5)
+    del play_obj[0]
+    play_fl = False
 
 
 CONFIDENCE = 0.5
@@ -21,6 +27,8 @@ weights_path = "weights/yolov3.weights"
 font_scale = 1
 thickness = 1
 found_obj = {}
+play_obj = []
+play_fl = False
 LABELS = open("data/coco.names").read().strip().split("\n")
 COLORS = np.random.randint(0, 255, size=(len(LABELS), 3), dtype="uint8")
 
@@ -44,7 +52,6 @@ while True:
     start = time.perf_counter()
     layer_outputs = net.forward(ln)
     time_took = time.perf_counter() - start
-    # print("Time took:", time_took)
     boxes, confidences, class_ids = [], [], []
     pos = 'none'
 
@@ -104,9 +111,8 @@ while True:
             cv2.rectangle(image, (x, y), (x + w, y + h), color=color, thickness=thickness)
             label = LABELS[class_ids[i]] + ' ' + pos
             text = f"{label}: {confidences[i]:.2f}"
-            # print(text)
             found_obj[label] = [found_obj.get(label, [0, True])[0] + 1, True]
-            print(found_obj)
+            
             # вычисляем ширину и высоту текста, чтобы рисовать прозрачные поля в качестве фона текста
             (text_width, text_height) = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX,
                                                         fontScale=font_scale, thickness=thickness)[0]
@@ -116,27 +122,30 @@ while True:
                                                            text_offset_y - text_height))
             overlay = image.copy()
             cv2.rectangle(overlay, box_coords[0], box_coords[1], color=color, thickness=cv2.FILLED)
+            
             # добавить непрозрачность (прозрачность поля)
             image = cv2.addWeighted(overlay, 0.6, image, 0.4, 0)
+            
             # теперь поместите текст (метка: доверие%)
             cv2.putText(image, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX,
                         fontScale=font_scale, color=(0, 0, 0), thickness=thickness)
+    
+    # Воспроизводим голосовое оповещение, если объект обнаружен на 10 кадрах
     for key, val in found_obj.items():
         if not val[1]:
             found_obj[key] = [0, False]
         else:
             found_obj[key][1] = False
         if val[0] == 10:
+            play_obj.append(key)
+        elif val[0] == 100:
+            found_obj[key][0] = 11
+        if not play_fl and play_obj:
+            play_fl = True
             musicThread = Thread(target=play_voice,
-                                 args=(f"voices/{key.split()[0]}.wav",))
+                                 args=(f"voices/{play_obj[0].split()[0]}.wav", f"voices/{play_obj[0].split()[-1]}.wav"))
             musicThread.daemon = False
             musicThread.start()
-            musicThread.join()
-            musicThread = Thread(target=play_voice,
-                                 args=(f"voices/{key.split()[-1]}.wav",))
-            musicThread.daemon = False
-            musicThread.start()
-            musicThread.join()
 
     cv2.imshow("image", image)
     if ord("q") == cv2.waitKey(1):
